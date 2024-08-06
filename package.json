@@ -1,0 +1,53 @@
+{
+  "name": "crypto-currency-db",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "dev": "nodemon",
+    "build": "tsc --build",
+    "start": "node dist/index.js",
+    "setup": "npm i && npm run build && pm2 start --name crypto-currency-db npm -- start --update-env --time && pm2 save",
+    "deploy": "git pull --no-rebase && npm run build && pm2 restart crypto-currency-db --update-env --time && pm2 save"
+  },
+  "nodemonConfig": {
+    "watch": [
+      "./"
+    ],
+    "ext": "ts, json",
+    "exec": "tsx index.ts"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "@types/bcrypt": "^5.0.2",
+    "@types/cookie-parser": "^1.4.6",
+    "@types/cors": "^2.8.17",
+    "@types/express": "^4.17.21",
+    "@types/jsonwebtoken": "^9.0.6",
+    "@types/multer": "^1.4.11",
+    "@types/nodemailer": "^6.4.14",
+    "nodemon": "^3.1.0",
+    "tsx": "^4.7.1",
+    "typescript": "^5.3.3"
+  },
+  "dependencies": {
+    "axios": "^1.6.7",
+    "bcrypt": "^5.1.1",
+    "cloudinary": "^2.0.3",
+    "cookie-parser": "^1.4.6",
+    "cors": "^2.8.5",
+    "date-fns": "^3.6.0",
+    "dotenv": "^16.4.5",
+    "express": "^4.18.2",
+    "express-async-handler": "^1.2.0",
+    "jsonwebtoken": "^9.0.2",
+    "jwt-decode": "^4.0.0",
+    "mongoose": "^8.2.0",
+    "multer": "^1.4.5-lts.1",
+    "nodemailer": "^6.9.11",
+    "sharp": "^0.33.2",
+    "tsc-watch": "^6.0.4"
+  }
+}
