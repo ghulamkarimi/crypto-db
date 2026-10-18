@@ -8,7 +8,7 @@ const transporter = nodemailer.createTransport({
   port: 587,
   secure: false,
   auth: {
-    user: "adelnamazi61@gmail.com",
+    user: process.env.EMAIL,
     pass: process.env.PASSMAIL,
   },
 });
@@ -19,7 +19,7 @@ export const sendVerificationLinkToEmail = async (
   verificationCode: number
 ) => {
   const mailOptions = {
-    from: "adelnamazi61@gmail.com",
+    from: process.env.EMAIL,
     to: email,
     subject: "Verify Your Account",
     html: `

@@ -8,9 +8,11 @@ export const errorHandler = (
 ) => {
   const statusCode = res.statusCode === 200 ? 500 : res.statusCode;
   res.status(statusCode);
+  const isDev = process.env.NODE_ENV === "development";
   res.json({
     message: err.message,
-    stack: process.env.NODE_ENV === "production" ? null : err.stack,
+    // Stack-Traces nur in der Entwicklung
+    stack: isDev ? err.stack : null,
   });
 };
 

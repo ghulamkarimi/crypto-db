@@ -108,11 +108,28 @@ const userSchema = new mongoose.Schema<IUser>(
     },
     verificationCode:{
       type:String
-    }
+    },
+    verificationCodeExpires: {
+      type: Date,
+    },
+    resetVerifiedUntil: {
+      type: Date,
+    },
   },
   {
     toJSON: {
       virtuals: true,
+      // Geheimnisse gehören nie in eine API-Antwort
+      transform: (_doc: unknown, ret: Record<string, unknown>) => {
+        delete ret.password;
+        delete ret.access_token;
+        delete ret.refresh_token;
+        delete ret.verificationCode;
+        delete ret.verificationCodeExpires;
+        delete ret.resetVerifiedUntil;
+        delete ret.__v;
+        return ret;
+      },
     },
     toObject: {
       virtuals: true,

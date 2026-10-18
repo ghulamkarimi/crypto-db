@@ -1,7 +1,8 @@
 import { Request, Response } from "express";
 import multer from "multer";
 import sharp from "sharp";
-import path from "path"
+import path from "path";
+import fs from "fs";
 
 const multerStorage = multer.memoryStorage();
 
@@ -39,13 +40,19 @@ export const profilePhotoResize = async (
   next: Function
 ) => {
   if (!req.file) return next();
-  req.file.filename = `user-${Date.now()}-${req.file.originalname}`;
+  req.file.filename = `user-${Date.now()}-${Math.random().toString(36).slice(2, 10)}.jpg`;
+  try {
+  fs.mkdirSync("public/images/profile", { recursive: true });
   await sharp(req.file.buffer)
-  .resize(250,250)
+  .resize(400,400)
   .toFormat("jpeg")
   .jpeg({quality:90})
   .toFile(path.join(`public/images/profile/${req.file.filename}`))
   next()
+  } catch (error) {
+    res.status(400);
+    next(new Error("Das Bild konnte nicht verarbeitet werden"));
+  }
 };
 
 export const postPhotoResize = async (
@@ -55,12 +62,18 @@ export const postPhotoResize = async (
 ) => {
   if (!req.file) return next();
   req.file.filename = `post-${Date.now()}-${req.file.originalname}`;
+  try {
+  fs.mkdirSync("public/images/posts", { recursive: true });
   await sharp(req.file.buffer)
   .resize(500,500)
   .toFormat("jpeg")
   .jpeg({quality:90})
   .toFile(path.join(`public/images/posts/${req.file.filename}`))
   next()
+  } catch (error) {
+    res.status(400);
+    next(new Error("Das Bild konnte nicht verarbeitet werden"));
+  }
 };
 
 export const newsPhotoResize = async (
@@ -70,12 +83,18 @@ export const newsPhotoResize = async (
 ) => {
   if (!req.file) return next();
   req.file.filename = `news-${Date.now()}-${req.file.originalname}`;
+  try {
+  fs.mkdirSync("public/images/news", { recursive: true });
   await sharp(req.file.buffer)
   .resize(500,500)
   .toFormat("jpeg")
   .jpeg({quality:90})
   .toFile(path.join(`public/images/news/${req.file.filename}`))
   next()
+  } catch (error) {
+    res.status(400);
+    next(new Error("Das Bild konnte nicht verarbeitet werden"));
+  }
 };
 
 export const analyzePhotoResize = async (
@@ -85,10 +104,16 @@ export const analyzePhotoResize = async (
 ) => {
   if (!req.file) return next();
   req.file.filename = `analyze-${Date.now()}-${req.file.originalname}`;
+  try {
+  fs.mkdirSync("public/images/analyze", { recursive: true });
   await sharp(req.file.buffer)
   .resize(500,500)
   .toFormat("jpeg")
   .jpeg({quality:90})
   .toFile(path.join(`public/images/analyze/${req.file.filename}`))
   next()
+  } catch (error) {
+    res.status(400);
+    next(new Error("Das Bild konnte nicht verarbeitet werden"));
+  }
 };

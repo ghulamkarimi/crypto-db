@@ -1,3 +1,5 @@
+import crypto from "crypto";
+import { findUserByEmail } from "../utils/findUserByEmail";
 import asyncHandler from "express-async-handler";
 import Users from "../models/userModel";
 import jwt from "jsonwebtoken";
@@ -16,9 +18,11 @@ interface CustomRequest extends Request {
 // Register User
 export const registerUser = asyncHandler(
   async (req: Request, res: Response) => {
-    const { firstName, lastName, email, password, confirmPassword, gender } =
-      req.body;
-    const existEmail = await Users.findOne({ email });
+    const { firstName, lastName, password, confirmPassword, gender } = req.body;
+    const email = typeof req.body.email === "string" ? req.body.email.trim().toLowerCase() : "";
+    if (!email || typeof password !== "string" || password.length < 6)
+      throw new Error("Please enter a valid email and a password with at least 6 characters.");
+    const existEmail = await findUserByEmail(email);
     if (existEmail)
       throw new Error("Oops! Looks like this email is already in our Database");
     if (password !== confirmPassword)
@@ -46,8 +50,9 @@ export const registerUser = asyncHandler(
 
 // Login User
 export const loginUser = asyncHandler(async (req: Request, res: Response) => {
-  const { email, password } = req.body;
-  const userFound = await Users.findOne({ email });
+  const email = typeof req.body.email === "string" ? req.body.email.trim().toLowerCase() : "";
+  const password = typeof req.body.password === "string" ? req.body.password : "";
+  const userFound = email && password ? await findUserByEmail(email) : null;
   if (userFound && (await userFound.isPasswordMatched(password))) {
     const {
       _id: userId,
@@ -130,17 +135,25 @@ export const verifyUserEmail = asyncHandler(
     const user = await Users.findById(loginUserId);
     if (!user) throw new Error("User not found");
     // Throw an error if the user's account has already been verified
-    if (user.isAccountVerified) return;
+    if (user.isAccountVerified) {
+      res.json({ message: "Your account is already verified." });
+      return;
+    }
 
-    const verificationCode = Math.floor(100000 + Math.random() * 900000);
+    const verificationCode = crypto.randomInt(100000, 1000000);
 
     user.verificationCode = verificationCode.toString();
+    user.verificationCodeExpires = new Date(Date.now() + 15 * 60 * 1000);
     await user.save();
-    sendVerificationLinkToEmail(user.email, user.firstName, verificationCode);
+    try {
+      await sendVerificationLinkToEmail(user.email, user.firstName, verificationCode);
+    } catch (e) {
+      console.error("Mail could not be sent");
+      throw new Error("The email could not be sent. Please try again later.");
+    }
     res.json({
       message:
         "Your activation code has been sent to your email. If you do not receive the email within 15 minutes, please request it again.",
-      verificationCode,
     });
   }
 );
@@ -153,8 +166,15 @@ export const accountVerification = asyncHandler(
     if (!user) throw new Error("no user");
     try {
       const { verificationCode } = req.body;
-      if (verificationCode === user.verificationCode) {
+      if (
+        typeof verificationCode === "string" &&
+        user.verificationCode &&
+        verificationCode === user.verificationCode &&
+        user.verificationCodeExpires &&
+        user.verificationCodeExpires.getTime() > Date.now()
+      ) {
         user.verificationCode = "";
+        user.verificationCodeExpires = undefined;
         user.isAccountVerified = true;
 
         await user.save();
@@ -176,7 +196,7 @@ export const accountVerification = asyncHandler(
 // Get All Users
 export const getAllUsers = asyncHandler(async (req: Request, res: Response) => {
   try {
-    const users = await Users.find();
+    const users = await Users.find().select("-email -password -access_token -refresh_token -verificationCode -verificationCodeExpires -resetVerifiedUntil");
     res.json(users);
   } catch (error) {
     res.json(error);
@@ -185,22 +205,20 @@ export const getAllUsers = asyncHandler(async (req: Request, res: Response) => {
 
 export const profilePhotoUser = asyncHandler(
   async (req: CustomRequest, res: Response) => {
-    try {
-      const userId = req.userId;
-      const localPath = `public/images/profile/${req.file.filename}`;
-      const imageUploaded = await cloudinaryUploadImage(localPath);
-      const user = await Users.findByIdAndUpdate(
-        userId,
-        {
-          profile_photo: imageUploaded.url,
-        },
-        { new: true }
-      );
-      fs.unlinkSync(localPath);
-      res.json({ message: "success", user: user });
-    } catch (error) {
-      res.json(error);
+    if (!req.file) {
+      res.status(400);
+      throw new Error("Keine Bilddatei empfangen");
     }
+    const userId = req.userId;
+    const localPath = `public/images/profile/${req.file.filename}`;
+    const imageUploaded = await cloudinaryUploadImage(localPath);
+    const user = await Users.findByIdAndUpdate(
+      userId,
+      { profile_photo: imageUploaded.url },
+      { new: true }
+    );
+    fs.unlink(localPath, () => {});
+    res.json({ message: "success", user: user });
   }
 );
 
@@ -247,7 +265,7 @@ export const changePassword = asyncHandler(
     const userId = req.userId;
     const { password, newPassword, confirmPassword } = req.body;
     const user = await Users.findById(userId);
-    if (await user.isPasswordMatched(password)) {
+    if (typeof password === "string" && typeof newPassword === "string" && newPassword.length >= 6 && (await user.isPasswordMatched(password))) {
       if (newPassword !== confirmPassword) {
         throw new Error("Password and Confirm Password do not match.");
       }
@@ -370,25 +388,26 @@ export const examScoreRegistration = asyncHandler(
 //wenn Benutzer hat seine Password Vergessen muss zuerst seine email bestätigen
 export const confirmEmail = asyncHandler(
   async (req: Request, res: Response) => {
-    const { email } = req.body;
-    const user = await Users.findOne({ email });
+    const email = typeof req.body.email === "string" ? req.body.email.trim().toLowerCase() : "";
+    const user = email ? await findUserByEmail(email) : null;
 
-    if (!user) {
-      throw new Error("User not found");
+    if (user && user.email) {
+      const verificationCode = crypto.randomInt(100000, 1000000);
+      user.verificationCode = verificationCode.toString();
+      user.verificationCodeExpires = new Date(Date.now() + 15 * 60 * 1000);
+      user.resetVerifiedUntil = undefined;
+      await user.save();
+      try {
+        await sendVerificationLinkToEmail(user.email, user.firstName, verificationCode);
+      } catch (e) {
+        console.error("Mail could not be sent");
+        throw new Error("The email could not be sent. Please try again later.");
+      }
     }
-
-    if (!user.email) {
-      throw new Error("User's email not found");
-    }
-    const verificationCode = Math.floor(100000 + Math.random() * 900000);
-
-    user.verificationCode = verificationCode.toString();
-    await user.save();
-    sendVerificationLinkToEmail(user.email, user.firstName, verificationCode);
+    // gleiche Antwort, egal ob die Adresse existiert (keine Konto-Erkennung)
     res.json({
       message:
-        "Your activation code has been sent to your email. If you do not receive the email within 15 minutes, please request it again.",
-      verificationCode,
+        "If this email is registered, an activation code has been sent. If you do not receive the email within 15 minutes, please request it again.",
       email,
     });
   }
@@ -397,34 +416,53 @@ export const confirmEmail = asyncHandler(
 //CHANGE PASSWORD WENN USER IST Nicht LOGIN
 export const changePasswordWithotLogin = asyncHandler(
   async (req: Request, res: Response) => {
-    const { email, newPassword, confirmPassword } = req.body;
-    const user = await Users.findOne({ email });
-    if (user) {
+    const { newPassword, confirmPassword } = req.body;
+    const email = typeof req.body.email === "string" ? req.body.email.trim().toLowerCase() : "";
+    const user = email ? await findUserByEmail(email) : null;
+    if (
+      user &&
+      user.resetVerifiedUntil &&
+      user.resetVerifiedUntil.getTime() > Date.now()
+    ) {
+      if (typeof newPassword !== "string" || newPassword.length < 6)
+        throw new Error("Password must be at least 6 characters.");
       if (newPassword !== confirmPassword) {
         throw new Error("Password and Confirm Password do not match.");
       }
       user.password = newPassword;
+      user.resetVerifiedUntil = undefined;
+      user.access_token = undefined; // alte Sitzungen beenden
       await user.save();
       res.json({
         message: "Your password has been successfully changed.",
         user: user,
       });
     } else {
-      throw new Error("user Not Found");
+      throw new Error("Please verify your email code first.");
     }
   }
 );
 
 export const confirmVerificationCode = asyncHandler(
   async (req: Request, res: Response) => {
-    const { email, verificationCode } = req.body;
-    const user = await Users.findOne({ email });
+    const email = typeof req.body.email === "string" ? req.body.email.trim().toLowerCase() : "";
+    const { verificationCode } = req.body;
+    const user = email ? await findUserByEmail(email) : null;
 
-    if (!user) throw new Error("no user");
+    if (!user) throw new Error("Code is not valid");
 
-    if (verificationCode === user.verificationCode) {
+    if (
+      typeof verificationCode === "string" &&
+      user.verificationCode &&
+      verificationCode === user.verificationCode &&
+      user.verificationCodeExpires &&
+      user.verificationCodeExpires.getTime() > Date.now()
+    ) {
       user.verificationCode = "";
+      user.verificationCodeExpires = undefined;
       user.isAccountVerified = true;
+      // Zeitfenster, in dem das Passwort ohne Login geändert werden darf
+      user.resetVerifiedUntil = new Date(Date.now() + 15 * 60 * 1000);
 
       await user.save();
 
@@ -463,7 +501,18 @@ export const checkAndUpdateExpDateJournal = asyncHandler(
   async (req: CustomRequest, res: Response) => {
     const loginUserId = req.userId;
     const user = await Users.findById(loginUserId);
-    if (user && user.expJournal) {
+    if (!user) throw new Error("User not found");
+    if (!user.expJournal) {
+      // Kein aktiver Journal-Plan: kein Fehler, nur Status 400
+      res.json({
+        _id: user._id,
+        user,
+        status: 400,
+        message: "No active journal plan",
+      });
+      return;
+    }
+    if (user.expJournal) {
       const currentDate = new Date();
       if (currentDate > user.expJournal) {
         user.iatJournal = undefined;
@@ -480,7 +529,7 @@ export const checkAndUpdateExpDateJournal = asyncHandler(
         });
       } else {
      
-        const difference = currentDate.getTime() - user.expJournal.getTime();
+        const difference = user.expJournal.getTime() - currentDate.getTime();
         const daysDifference = Math.ceil(difference / (1000 * 60 * 60 * 24));
         res.json({
           _id: user._id,

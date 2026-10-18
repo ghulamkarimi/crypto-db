@@ -18,13 +18,15 @@ export interface IUser {
   viewedBy: [];
   followers: [];
   following: [];
-  access_token: string;
+  access_token?: string;
   randomVerifyAccountToken: string;
   isPasswordMatched: Function;
   createAccountVerificationToken: Function;
   accountVerificationToken: string;
   accountVerificationTokenExpires: Date;
   verificationCode: string;
+  verificationCodeExpires?: Date;
+  resetVerifiedUntil?: Date;
   isPaid: boolean;
   planJournal: number;
   priceJournal: string;
