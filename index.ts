@@ -17,6 +17,7 @@ import commentRouter from "./routes/commentRouter";
 import quizRouter from "./routes/quizRouter";
 import journalRouter from "./routes/journalRouter";
 
+
 dbConnect().then(() => startCoinSync());
 
 const app = express();
