@@ -33,4 +33,4 @@ jobs:
             --exclude node_modules --exclude .git --exclude .env --exclude uploads \
             ./ ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}:/var/www/crypto-db/
           ssh ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} \
-            "cd /var/www/crypto-db && npm ci && pm2 restart crypto-db"
+            "cd /var/www/crypto-db && npm ci && pm2 restart crypto-currency-db"
